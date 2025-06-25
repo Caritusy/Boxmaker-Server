@@ -1,0 +1,10 @@
+﻿@page
+@model BoxMaker_Server.Pages.statusModel
+@{
+	ViewData["Title"] = "服务器信息";
+	var date = DateTime.Now - Program.serverBeginDT;
+}
+<p>服务器已运行： @date.Days 天 @date.Hours 小时 @date.Minutes 分</p>
+<p>玩家：@BoxmakerProxy.GetOnlinePlayerCount() / @AccountManager.GetAccounts() </p>
+<p>服务器当前有 @AccountManager.serverMaps.Count 张地图</p>
+<p>服务器最低支持客户端版本： @BoxmakerProxy.ServerVerD </p>
