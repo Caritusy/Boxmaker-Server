@@ -5,34 +5,37 @@
 }
 
 <section class="workspace-shell">
-    <div class="workspace-header">
+    <header class="workspace-header">
         <div>
             <p class="eyebrow">Boxmaker Server</p>
             <h1>盒造再生控制台</h1>
         </div>
         <div id="sessionBadge" class="session-badge">未登录</div>
-    </div>
+    </header>
 
     <div class="workspace-grid">
         <section class="panel account-panel">
             <div class="panel-heading">
-                <h2>账号</h2>
-                <button id="logoutButton" class="icon-button hidden" title="退出登录" type="button">↩</button>
+                <div>
+                    <p class="section-kicker">Account</p>
+                    <h2>账号与资料</h2>
+                </div>
+                <button id="logoutButton" class="ghost-button hidden" type="button">退出</button>
             </div>
 
-            <form id="loginForm" class="stack">
-                <label>
-                    OpenID
+            <form id="loginForm" class="form-stack">
+                <label class="field-block">
+                    <span>OpenID</span>
                     <input id="openidInput" name="openid" autocomplete="username" />
                 </label>
-                <label>
-                    密码
+                <label class="field-block">
+                    <span>密码</span>
                     <input id="openkeyInput" name="openkey" type="password" autocomplete="current-password" />
                 </label>
-                <button type="submit">登录</button>
+                <button type="submit">登录控制台</button>
             </form>
 
-            <div id="profilePane" class="hidden stack">
+            <div id="profilePane" class="hidden profile-space">
                 <div class="identity-row">
                     <div class="avatar" id="avatarBox">0</div>
                     <div>
@@ -43,37 +46,60 @@
 
                 <div class="stat-grid">
                     <div><span id="levelValue">0</span><small>等级</small></div>
-                    <div><span id="nextExpValue">0</span><small>下一级</small></div>
-                    <div><span id="amountValue">0</span><small>游玩</small></div>
-                    <div><span id="pasValue">0</span><small>通关</small></div>
+                    <div><span id="nextExpValue">0</span><small>升级还需</small></div>
+                    <div><span id="amountValue">0</span><small>游玩关卡</small></div>
+                    <div><span id="pasValue">0</span><small>通关关卡</small></div>
                     <div><span id="commentValue">0</span><small>评论</small></div>
                     <div><span id="watchedValue">0</span><small>录像观看</small></div>
                 </div>
 
-                <form id="profileForm" class="compact-form">
-                    <input id="nicknameInput" placeholder="名称" />
-                    <input id="nationalityInput" placeholder="地区" />
-                    <input id="headInput" type="number" min="0" step="1" placeholder="头像" />
+                <form id="profileForm" class="form-stack">
+                    <label class="field-block">
+                        <span>显示名称</span>
+                        <input id="nicknameInput" maxlength="24" />
+                    </label>
+
+                    <label class="field-block">
+                        <span>国家/地区</span>
+                        <select id="nationalityInput"></select>
+                    </label>
+
+                    <div class="field-block">
+                        <span>头像</span>
+                        <div id="avatarOptions" class="avatar-options"></div>
+                    </div>
+
                     <button type="submit">保存资料</button>
                 </form>
 
-                <form id="passwordForm" class="compact-form">
-                    <input id="oldPasswordInput" type="password" placeholder="当前密码" autocomplete="current-password" />
-                    <input id="newPasswordInput" type="password" placeholder="新密码" autocomplete="new-password" />
-                    <button type="submit">更改密码</button>
+                <form id="passwordForm" class="form-stack">
+                    <label class="field-block">
+                        <span>当前密码</span>
+                        <input id="oldPasswordInput" type="password" autocomplete="current-password" />
+                    </label>
+                    <label class="field-block">
+                        <span>新密码</span>
+                        <input id="newPasswordInput" type="password" autocomplete="new-password" />
+                    </label>
+                    <button type="submit">更新密码</button>
                 </form>
             </div>
         </section>
 
         <section class="panel map-panel">
             <div class="panel-heading">
-                <h2>地图搜索</h2>
-                <span id="mapCountLabel">0</span>
+                <div>
+                    <p class="section-kicker">Maps</p>
+                    <h2>关卡检索</h2>
+                </div>
+                <span id="mapCountLabel" class="count-pill">0 项</span>
             </div>
+
             <form id="searchForm" class="search-bar">
-                <input id="mapSearchInput" placeholder="地图名、作者或 ID" />
+                <input id="mapSearchInput" placeholder="搜索关卡标题、作者或 ID" />
                 <button type="submit">搜索</button>
             </form>
+
             <div id="mapResults" class="map-results"></div>
         </section>
     </div>
@@ -82,5 +108,7 @@
 @section Scripts {
     <script>
         window.boxmakerInitialUser = @Html.Raw(Model.InitialUserJson);
+        window.boxmakerCountryOptions = @Html.Raw(Model.CountryOptionsJson);
+        window.boxmakerAvatarOptions = @Html.Raw(Model.AvatarOptionsJson);
     </script>
 }

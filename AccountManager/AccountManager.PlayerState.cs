@@ -7,6 +7,8 @@ namespace BoxMaker_Server
     {
         private const string OldPlayerRegisterText = "i'm old player";
         private const int PlayerStateListLimit = 10;
+        private static readonly object PlayerStateCacheLock = new object();
+        private static readonly Dictionary<string, PlayerState> PlayerStateCacheByPath = new Dictionary<string, PlayerState>();
 
         public static bool TryGetPlayerInfo(int userid, out smsg_view_player retDat)
         {
@@ -24,7 +26,7 @@ namespace BoxMaker_Server
             }
             catch
             {
-                retDat = null;
+                retDat = null!;
                 return false;
             }
         }
@@ -117,7 +119,7 @@ namespace BoxMaker_Server
                 return;
             }
 
-            map_point_rank rank = map.ranks.FirstOrDefault(x => x.video_id == videoId);
+            map_point_rank? rank = map.ranks.FirstOrDefault(x => x.video_id == videoId);
             if (rank == null || rank.user_id <= 0)
             {
                 return;
@@ -259,19 +261,36 @@ namespace BoxMaker_Server
 
         private static PlayerState LoadPlayerState(string userPath)
         {
+            lock (PlayerStateCacheLock)
+            {
+                if (PlayerStateCacheByPath.TryGetValue(userPath, out PlayerState? cached) && cached != null)
+                {
+                    return cached;
+                }
+            }
+
             string playerStatePath = UserPlayerStatePath(userPath);
             if (!System.IO.File.Exists(playerStatePath))
             {
-                return null;
+                return null!;
             }
 
             try
             {
-                return JsonConvert.DeserializeObject<PlayerState>(System.IO.File.ReadAllText(playerStatePath));
+                PlayerState? state = JsonConvert.DeserializeObject<PlayerState>(System.IO.File.ReadAllText(playerStatePath));
+                if (state != null)
+                {
+                    lock (PlayerStateCacheLock)
+                    {
+                        PlayerStateCacheByPath[userPath] = state;
+                    }
+                }
+
+                return state ?? null!;
             }
             catch
             {
-                return null;
+                return null!;
             }
         }
 
@@ -286,7 +305,13 @@ namespace BoxMaker_Server
         private static void SavePlayerState(string userPath, PlayerState state)
         {
             TrimPlayerStateLists(state);
-            System.IO.File.WriteAllText(UserPlayerStatePath(userPath), JsonConvert.SerializeObject(state));
+            string json = JsonConvert.SerializeObject(state);
+            lock (PlayerStateCacheLock)
+            {
+                PlayerStateCacheByPath[userPath] = state;
+            }
+
+            EnqueueIo("playerstate save", () => System.IO.File.WriteAllText(UserPlayerStatePath(userPath), json));
         }
 
         private static void UpsertUploadMap(PlayerState state, ServerMap map)

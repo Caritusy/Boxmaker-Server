@@ -133,13 +133,13 @@ namespace BoxMaker_Server
                     map.map.pas += 1;
                     replayResult = UpsertRankReplay(map, acc, pckDat.time, pckDat.video);
                     exp = Utils.get_map_exp(map.map.pas, map.map.amount);
-                    SaveServerMap(map);
+                    QueueSaveServerMap(map, "complete map success");
 
                     List<int> clearList = JsonConvert.DeserializeObject<List<int>>(System.IO.File.ReadAllText(UserClearListPath(userP))) ?? new List<int>();
                     if (!clearList.Contains(mapid))
                     {
                         clearList.Add(mapid);
-                        System.IO.File.WriteAllText(UserClearListPath(userP), JsonConvert.SerializeObject(clearList));
+                        QueueWriteUserMapIdList(UserClearListPath(userP), clearList, "clear list");
                     }
                 }
 
@@ -367,6 +367,13 @@ namespace BoxMaker_Server
 
         public static List<map_show> SearchMapsForWeb(string keyword, int limit = 20)
         {
+            return SearchServerMapsForWeb(keyword, limit)
+                .Select(map => BuildMapShow(map, 0, new HashSet<int>(), new HashSet<int>()))
+                .ToList();
+        }
+
+        public static List<ServerMap> SearchServerMapsForWeb(string keyword, int limit = 20)
+        {
             keyword ??= "";
             IEnumerable<ServerMap> maps = GetServerMapSnapshot()
                 .Where(x => x?.map != null);
@@ -385,7 +392,6 @@ namespace BoxMaker_Server
             return maps
                 .OrderByDescending(x => x.map.id)
                 .Take(Math.Clamp(limit, 1, 50))
-                .Select(map => BuildMapShow(map, 0, new HashSet<int>(), new HashSet<int>()))
                 .ToList();
         }
 

@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using protocol.game;
 using protocol.map;
 using System.Buffers.Text;
@@ -11,36 +11,47 @@ namespace BoxMaker_Server
 {
     public partial class AccountManager
     {
+        private static readonly object AccountCacheLock = new object();
+        private static readonly Dictionary<int, string> AccountPathByUserId = new Dictionary<int, string>();
+        private static readonly Dictionary<string, string> AccountPathByOpenId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<int, smsg_login> AccountByUserId = new Dictionary<int, smsg_login>();
+        private static readonly Dictionary<string, smsg_login> AccountByOpenId = new Dictionary<string, smsg_login>(StringComparer.OrdinalIgnoreCase);
+        private static bool AccountPathCacheLoaded;
+
         public static bool TryGetUserPath(int uid, out string path)
         {
-            string[] d = Directory.GetDirectories(AccDataPath);
-            foreach (string p in d)
+            EnsureAccountPathCache();
+            lock (AccountCacheLock)
             {
-                string pathE = Path.GetFileName(p);
-                string[] a = pathE.Split(AccountPathSeparator);
-                if (a.Length > 0 && a[0] == uid.ToString())
+                if (AccountPathByUserId.TryGetValue(uid, out string? cachedPath) && cachedPath != null)
                 {
-                    path = p;
+                    path = cachedPath;
                     return true;
                 }
             }
+
             path = "";
             return false;
         }
 
         public static bool TryGetUserPath(string userName, out string path)
         {
-            string[] d = Directory.GetDirectories(AccDataPath);
-            foreach (string p in d)
+            if (string.IsNullOrWhiteSpace(userName))
             {
-                string pathE = Path.GetFileName(p);
-                string[] a = pathE.Split(AccountPathSeparator);
-                if (a.Length > 1 && a[1] == userName)
+                path = "";
+                return false;
+            }
+
+            EnsureAccountPathCache();
+            lock (AccountCacheLock)
+            {
+                if (AccountPathByOpenId.TryGetValue(userName, out string? cachedPath) && cachedPath != null)
                 {
-                    path = p;
+                    path = cachedPath;
                     return true;
                 }
             }
+
             path = "";
             return false;
         }
@@ -48,13 +59,30 @@ namespace BoxMaker_Server
         public static bool TryGetAccount(int uid, out smsg_login loginData)
         {
             Init();
+            lock (AccountCacheLock)
+            {
+                if (AccountByUserId.TryGetValue(uid, out smsg_login? cachedAccount) && cachedAccount != null)
+                {
+                    loginData = cachedAccount;
+                    return true;
+                }
+            }
+
             string p = "";
             if (!TryGetUserPath(uid, out p))
             {
-                loginData = null;
+                loginData = null!;
                 return false;
             }
-            loginData = JsonConvert.DeserializeObject<smsg_login>(System.IO.File.ReadAllText(UserInfoPath(p)));
+            smsg_login? loadedAccount = JsonConvert.DeserializeObject<smsg_login>(System.IO.File.ReadAllText(UserInfoPath(p)));
+            if (loadedAccount == null)
+            {
+                loginData = null!;
+                return false;
+            }
+
+            loginData = loadedAccount;
+            CacheAccount(loginData, p);
             return true;
 
         }
@@ -62,13 +90,36 @@ namespace BoxMaker_Server
         public static bool TryGetAccount(string openid, out smsg_login loginData)
         {
             Init();
+            if (string.IsNullOrWhiteSpace(openid))
+            {
+                loginData = null!;
+                return false;
+            }
+
+            lock (AccountCacheLock)
+            {
+                if (AccountByOpenId.TryGetValue(openid, out smsg_login? cachedAccount) && cachedAccount != null)
+                {
+                    loginData = cachedAccount;
+                    return true;
+                }
+            }
+
             string p = "";
             if (!TryGetUserPath(openid, out p))
             {
-                loginData = null;
+                loginData = null!;
                 return false;
             }
-            loginData = JsonConvert.DeserializeObject<smsg_login>(System.IO.File.ReadAllText(UserInfoPath(p)));
+            smsg_login? loadedAccount = JsonConvert.DeserializeObject<smsg_login>(System.IO.File.ReadAllText(UserInfoPath(p)));
+            if (loadedAccount == null)
+            {
+                loginData = null!;
+                return false;
+            }
+
+            loginData = loadedAccount;
+            CacheAccount(loginData, p);
             return true;
 
         }
@@ -82,7 +133,7 @@ namespace BoxMaker_Server
                 return false;
             }
             //loginData = JsonConvert.DeserializeObject<smsg_login>(File.ReadAllText(p + "/userinfo"));
-            System.IO.File.WriteAllText(UserInfoPath(p),JsonConvert.SerializeObject(loginData));
+            QueueSaveAccount(p, loginData);
             return true;
         }
 
@@ -97,7 +148,7 @@ namespace BoxMaker_Server
                     return false;
                 }
                 //loginData = JsonConvert.DeserializeObject<smsg_login>(File.ReadAllText(p + "/userinfo"));
-                System.IO.File.WriteAllText(UserInfoPath(p), JsonConvert.SerializeObject(loginData));
+                QueueSaveAccount(p, loginData);
                 return true;
             }
             catch { return false; }
@@ -105,7 +156,7 @@ namespace BoxMaker_Server
 
         public static bool TryWebLogin(string openid, string openkey, out smsg_login loginData)
         {
-            loginData = null;
+            loginData = null!;
             if (string.IsNullOrWhiteSpace(openid) || string.IsNullOrWhiteSpace(openkey))
             {
                 return false;
@@ -190,6 +241,7 @@ namespace BoxMaker_Server
             string accountPath = AccountDirectoryPath(accD.userid, accD.openid);
             Directory.CreateDirectory(accountPath);
             System.IO.File.WriteAllText(UserInfoPath(accountPath), JsonConvert.SerializeObject(accD));
+            CacheAccount(accD, accountPath);
             CreatePlayerStateForNewAccount(accountPath, accD);
             return accD;
         }
@@ -200,9 +252,14 @@ namespace BoxMaker_Server
             string userp = "";
             if (!TryGetUserPath(userid, out userp))
             {
-                return null;
+                return null!;
             }
             var loginData = JsonConvert.DeserializeObject<smsg_login>(System.IO.File.ReadAllText(UserInfoPath(userp)));
+            if (loginData == null)
+            {
+                return null!;
+            }
+
             string newDire = AccountDirectoryPath(userid, regData.openid);
             if (!Directory.Exists(newDire))
             {
@@ -228,6 +285,8 @@ namespace BoxMaker_Server
             loginData.head = regData.head;
             loginData.visitor = 0;
             System.IO.File.WriteAllText(UserInfoPath(newDire), JsonConvert.SerializeObject(loginData));
+            RemoveCachedAccountPath(userp);
+            CacheAccount(loginData, newDire);
             if (!System.IO.File.Exists(UserPlayerStatePath(newDire)))
             {
                 CreatePlayerStateForNewAccount(newDire, loginData);
@@ -262,6 +321,90 @@ namespace BoxMaker_Server
             }
             TrySaveAccount(acc.userid,acc);
             UpdatePlayerStateAccount(acc);
+        }
+
+        private static void EnsureAccountPathCache()
+        {
+            if (AccountPathCacheLoaded)
+            {
+                return;
+            }
+
+            lock (AccountCacheLock)
+            {
+                if (AccountPathCacheLoaded)
+                {
+                    return;
+                }
+
+                Init();
+                AccountPathByUserId.Clear();
+                AccountPathByOpenId.Clear();
+
+                foreach (string accountPath in Directory.GetDirectories(AccDataPath))
+                {
+                    string directoryName = Path.GetFileName(accountPath);
+                    string[] parts = directoryName.Split(AccountPathSeparator);
+                    if (parts.Length == 0 || !int.TryParse(parts[0], out int userid))
+                    {
+                        continue;
+                    }
+
+                    AccountPathByUserId[userid] = accountPath;
+                    if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
+                    {
+                        AccountPathByOpenId[parts[1]] = accountPath;
+                    }
+                }
+
+                AccountPathCacheLoaded = true;
+            }
+        }
+
+        private static void CacheAccount(smsg_login account, string accountPath)
+        {
+            if (account == null)
+            {
+                return;
+            }
+
+            lock (AccountCacheLock)
+            {
+                AccountPathByUserId[account.userid] = accountPath;
+                if (!string.IsNullOrWhiteSpace(account.openid))
+                {
+                    AccountPathByOpenId[account.openid] = accountPath;
+                    AccountByOpenId[account.openid] = account;
+                }
+
+                AccountByUserId[account.userid] = account;
+                AccountPathCacheLoaded = true;
+            }
+        }
+
+        private static void RemoveCachedAccountPath(string accountPath)
+        {
+            lock (AccountCacheLock)
+            {
+                foreach (int userid in AccountPathByUserId.Where(x => x.Value == accountPath).Select(x => x.Key).ToList())
+                {
+                    AccountPathByUserId.Remove(userid);
+                    AccountByUserId.Remove(userid);
+                }
+
+                foreach (string openid in AccountPathByOpenId.Where(x => x.Value == accountPath).Select(x => x.Key).ToList())
+                {
+                    AccountPathByOpenId.Remove(openid);
+                    AccountByOpenId.Remove(openid);
+                }
+            }
+        }
+
+        private static void QueueSaveAccount(string accountPath, smsg_login account)
+        {
+            CacheAccount(account, accountPath);
+            string json = JsonConvert.SerializeObject(account);
+            EnqueueIo("account save", () => System.IO.File.WriteAllText(UserInfoPath(accountPath), json));
         }
     }
 }

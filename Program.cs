@@ -42,7 +42,7 @@ namespace BoxMaker_Server
                     pattern: "{controller=Home}/{action=Index}/{id?}");
             });
 
-			Console.WriteLine("[red][服务器][white] Boxmaker.LocalServer 已经运行，访问 localhost:8080 查看服务是否正在运行。");
+            Console.WriteLine("[green][SERVER] Boxmaker.LocalServer is running. Check the configured ASP.NET Core endpoint to access the web console.");
 
             serverBeginDT = DateTime.Now;
 

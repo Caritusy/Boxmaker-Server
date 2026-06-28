@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using protocol.game;
 using protocol.map;
 using System.Buffers.Text;
@@ -126,7 +126,11 @@ namespace BoxMaker_Server
 
         public static int GetAccounts()
         {
-            return System.IO.Directory.GetDirectories(AccDataPath).Length;
+            EnsureAccountPathCache();
+            lock (AccountCacheLock)
+            {
+                return AccountPathByUserId.Count;
+            }
         }
 
         public static void Init()

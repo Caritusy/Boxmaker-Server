@@ -11,13 +11,46 @@ const api = async (url, payload) => {
 };
 
 const state = {
-    user: window.boxmakerInitialUser?.ok ? window.boxmakerInitialUser.user : null,
+    user: null,
+    countries: [],
+    avatars: [],
+    selectedAvatar: 0,
 };
 
 const $ = (id) => document.getElementById(id);
 
 const setMessage = (text) => {
     $("sessionBadge").textContent = text;
+};
+
+const avatarName = (id) => state.avatars.find((item) => item.id === Number(id))?.name ?? `头像 ${id}`;
+
+const countryName = (code) => state.countries.find((item) => item.code === code)?.name ?? code ?? "--";
+
+const renderOptions = () => {
+    $("nationalityInput").innerHTML = state.countries
+        .map((item) => `<option value="${escapeHtml(item.code)}">${escapeHtml(item.name)} (${escapeHtml(item.code)})</option>`)
+        .join("");
+
+    $("avatarOptions").innerHTML = "";
+    for (const avatar of state.avatars) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "avatar-choice";
+        button.dataset.id = avatar.id;
+        button.innerHTML = `<span>${avatar.id}</span><small>${escapeHtml(avatar.name)}</small>`;
+        button.addEventListener("click", () => {
+            state.selectedAvatar = avatar.id;
+            renderAvatarSelection();
+        });
+        $("avatarOptions").appendChild(button);
+    }
+};
+
+const renderAvatarSelection = () => {
+    document.querySelectorAll(".avatar-choice").forEach((button) => {
+        button.classList.toggle("selected", Number(button.dataset.id) === Number(state.selectedAvatar));
+    });
 };
 
 const renderUser = () => {
@@ -32,11 +65,13 @@ const renderUser = () => {
     }
 
     const user = state.user;
+    state.selectedAvatar = Number(user.head || 0);
     setMessage(`${user.name} #${user.userid}`);
     $("avatarBox").textContent = user.head;
+    $("avatarBox").title = avatarName(user.head);
     $("playerName").textContent = user.name;
-    $("playerMeta").textContent = `${user.openid} · ${user.country || "--"} · ${user.register || ""}`;
-    $("levelValue").textContent = user.level;
+    $("playerMeta").textContent = `${user.openid} · ${countryName(user.country)} · ${user.register || "未知注册时间"}`;
+    $("levelValue").textContent = `Lv.${user.level}`;
     $("nextExpValue").textContent = `${user.nextExp} EXP`;
     $("amountValue").textContent = user.amount;
     $("pasValue").textContent = user.pas;
@@ -44,42 +79,78 @@ const renderUser = () => {
     $("watchedValue").textContent = user.watched;
     $("nicknameInput").value = user.name;
     $("nationalityInput").value = user.country || "";
-    $("headInput").value = user.head;
+    renderAvatarSelection();
 };
 
 const renderMaps = (maps) => {
-    $("mapCountLabel").textContent = maps.length;
+    $("mapCountLabel").textContent = `${maps.length} 项`;
     $("mapResults").innerHTML = "";
 
     if (maps.length === 0) {
-        $("mapResults").innerHTML = `<div class="empty-state">没有结果</div>`;
+        $("mapResults").innerHTML = `<div class="empty-state">没有找到匹配的关卡</div>`;
         return;
     }
 
     for (const map of maps) {
-        const passRate = map.amount <= 0 ? "0%" : `${Math.round((map.pas / map.amount) * 100)}%`;
-        const image = map.url
-            ? `<img src="data:image/png;base64,${map.url}" alt="" />`
-            : `<div class="map-placeholder">${map.id}</div>`;
         const item = document.createElement("article");
         item.className = "map-item";
         item.innerHTML = `
-            <div class="map-thumb">${image}</div>
-            <div class="map-info">
-                <h3>${escapeHtml(map.name || "未命名地图")}</h3>
-                <p>#${map.id}</p>
-            </div>
-            <div class="map-metrics">
-                <span>${map.amount} 玩</span>
-                <span>${passRate}</span>
-                <span>L${map.difficulty || "-"}</span>
+            <div class="map-icon">${escapeHtml(map.icon || "#")}</div>
+            <div class="map-main">
+                <div class="map-title-row">
+                    <h3>${escapeHtml(map.name || "未命名地图")}</h3>
+                    <span>#${map.id}</span>
+                </div>
+                <p>作者：${escapeHtml(map.ownerName || "未知")} · ${escapeHtml(countryName(map.country))} · ${escapeHtml(map.date || "未知日期")}</p>
+                <div class="map-stats">
+                    <span><strong>${map.amount}</strong> 次游玩</span>
+                    <span><strong>${map.pas}</strong> 次通关</span>
+                    <span><strong>${formatPassRate(map.passRate)}</strong> 通关率</span>
+                    <span><strong>${formatDifficulty(map.difficulty)}</strong>${map.forcedDifficulty ? " 固定难度" : " 动态难度"}</span>
+                    <span><strong>${map.exp}</strong> 预计经验</span>
+                    <span><strong>${map.like}</strong> 点赞</span>
+                    <span><strong>${map.favorite}</strong> 收藏</span>
+                </div>
             </div>
         `;
         $("mapResults").appendChild(item);
     }
 };
 
-const escapeHtml = (value) => value
+const hydrateBootData = () => {
+    state.user = window.boxmakerInitialUser?.ok ? window.boxmakerInitialUser.user : null;
+    state.countries = Array.isArray(window.boxmakerCountryOptions) ? window.boxmakerCountryOptions : [];
+    state.avatars = Array.isArray(window.boxmakerAvatarOptions) ? window.boxmakerAvatarOptions : [];
+
+    if (!state.countries.some((item) => item.code === "--")) {
+        state.countries.unshift({ code: "--", name: "未设置", flag: "gq_000" });
+    }
+
+    if (state.avatars.length === 0) {
+        state.avatars = [
+            { id: 0, name: "游客" },
+            { id: 1, name: "兔子" },
+            { id: 2, name: "小猪" },
+            { id: 3, name: "白鸟" },
+            { id: 4, name: "魔花" },
+            { id: 5, name: "刺猬" },
+            { id: 6, name: "乌龟" },
+            { id: 7, name: "空白" },
+        ];
+    }
+};
+
+const formatPassRate = (value) => {
+    const number = Number(value || 0);
+    return `${Number.isInteger(number) ? number : number.toFixed(1)}%`;
+};
+
+const formatDifficulty = (value) => {
+    const number = Number(value || 0);
+    return number <= 0 ? "未评级" : `难度 ${number}`;
+};
+
+const escapeHtml = (value) => String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -91,6 +162,8 @@ const refreshSearch = async (query = "") => {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+    hydrateBootData();
+    renderOptions();
     renderUser();
     refreshSearch("");
 
@@ -119,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await api("/?handler=Profile", {
             nickname: $("nicknameInput").value,
             nationality: $("nationalityInput").value,
-            head: Number($("headInput").value || 0),
+            head: Number(state.selectedAvatar || 0),
         });
         if (!data.ok) {
             setMessage(data.message || "保存失败");
@@ -127,6 +200,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         state.user = data.user;
         renderUser();
+        setMessage("资料已保存");
     });
 
     $("passwordForm").addEventListener("submit", async (event) => {
@@ -135,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
             oldPassword: $("oldPasswordInput").value,
             newPassword: $("newPasswordInput").value,
         });
-        setMessage(data.message || (data.ok ? "已更新" : "更新失败"));
+        setMessage(data.message || (data.ok ? "密码已更新" : "更新失败"));
         if (data.ok) {
             $("oldPasswordInput").value = "";
             $("newPasswordInput").value = "";
