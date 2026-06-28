@@ -45,11 +45,12 @@ namespace BoxMaker_Server
         {
             MemoryStream memoryStream = new MemoryStream();
             Serializer.Serialize(memoryStream, obj);
+            byte[] payload = memoryStream.ToArray();
 
             msg_response msg = new msg_response();
             msg.res = res;
-            msg.msg = memoryStream.ToArray();
-            msg.error = error;
+            msg.msg = payload;
+            msg.error = error ?? (res == -1 ? payload : Array.Empty<byte>());
 
             MemoryStream retMS = new MemoryStream();
             Serializer.Serialize(retMS, msg);

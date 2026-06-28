@@ -9,11 +9,14 @@ namespace BoxMaker_Server
             BoxmakerProxy proxy = new BoxmakerProxy();
 
             AccountManager.serverMaps = AccountManager.GetServerMapList();
+            AccountManager.RepairServerMapReplayIndexes();
+            AccountManager.RebuildAllPlayerStates();
 
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
             builder.Services.AddRazorPages();
+            builder.Services.AddSession();
 
             var app = builder.Build();
 
@@ -25,6 +28,8 @@ namespace BoxMaker_Server
             app.UseStaticFiles();
 
             app.UseRouting();
+
+            app.UseSession();
 
             app.UseAuthorization();
 
