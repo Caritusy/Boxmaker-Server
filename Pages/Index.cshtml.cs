@@ -9,7 +9,8 @@ namespace BoxMaker_Server.Pages
     public class IndexModel : PageModel
     {
         private const string WebUserSessionKey = "WebUserId";
-        private const string CountryConfigPath = @"D:\UnityProject\Boxmaker\ExportedProject\Assets\Resources\config\t_guojia.txt";
+        private const string CountryConfigRelativePath = @"Resources\config\t_guojia.txt";
+        private const string LegacyCountryConfigPath = @"D:\UnityProject\Boxmaker\ExportedProject\Assets\Resources\config\t_guojia.txt";
 
         public string InitialUserJson { get; private set; } = "null";
 
@@ -179,7 +180,8 @@ namespace BoxMaker_Server.Pages
         private static List<CountryOption> LoadCountryOptions()
         {
             CountryOption unsetOption = new CountryOption { code = "--", name = "未设置", flag = "gq_000" };
-            if (!System.IO.File.Exists(CountryConfigPath))
+            string? countryConfigPath = ResolveCountryConfigPath();
+            if (countryConfigPath == null)
             {
                 return new List<CountryOption>
                 {
@@ -188,7 +190,7 @@ namespace BoxMaker_Server.Pages
                 };
             }
 
-            List<CountryOption> options = System.IO.File.ReadLines(CountryConfigPath)
+            List<CountryOption> options = System.IO.File.ReadLines(countryConfigPath)
                 .Skip(2)
                 .Select(line => line.Split('\t'))
                 .Where(parts => parts.Length >= 2 && !string.IsNullOrWhiteSpace(parts[0]) && !string.IsNullOrWhiteSpace(parts[1]))
@@ -206,6 +208,20 @@ namespace BoxMaker_Server.Pages
             }
 
             return options;
+        }
+
+        private static string? ResolveCountryConfigPath()
+        {
+            string? configuredPath = Environment.GetEnvironmentVariable("BOXMAKER_COUNTRY_CONFIG");
+            string[] candidates =
+            {
+                configuredPath ?? "",
+                Path.Combine(AppContext.BaseDirectory, CountryConfigRelativePath),
+                Path.Combine(Directory.GetCurrentDirectory(), CountryConfigRelativePath),
+                LegacyCountryConfigPath,
+            };
+
+            return candidates.FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path));
         }
 
         private static List<AvatarOption> GetAvatarOptions()
