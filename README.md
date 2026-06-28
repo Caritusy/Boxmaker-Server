@@ -4,7 +4,7 @@ An ASP.NET Core server implementation for **Boxmaker**, designed for local hosti
 
 This repository contains the game API handlers, account persistence logic, map storage logic, mission flow, replay/ranking support, and a small Razor-based web console for basic account and map operations.
 
-For Chinese documentation, see [README.zh-CN.md](./README.zh-CN.md).
+本 readme 文档的中文版本, 查阅 [README.zh-CN.md](./README.zh-CN.md).
 
 ## Project Status
 
