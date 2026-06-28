@@ -42,10 +42,11 @@ namespace BoxMaker_Server
                 return false;
             }
 
+            string lookupName = userName.Trim();
             EnsureAccountPathCache();
             lock (AccountCacheLock)
             {
-                if (AccountPathByOpenId.TryGetValue(userName, out string? cachedPath) && cachedPath != null)
+                if (AccountPathByOpenId.TryGetValue(lookupName, out string? cachedPath) && cachedPath != null)
                 {
                     path = cachedPath;
                     return true;
@@ -96,6 +97,7 @@ namespace BoxMaker_Server
                 return false;
             }
 
+            openid = openid.Trim();
             lock (AccountCacheLock)
             {
                 if (AccountByOpenId.TryGetValue(openid, out smsg_login? cachedAccount) && cachedAccount != null)
@@ -340,11 +342,13 @@ namespace BoxMaker_Server
                 Init();
                 AccountPathByUserId.Clear();
                 AccountPathByOpenId.Clear();
+                AccountByUserId.Clear();
+                AccountByOpenId.Clear();
 
                 foreach (string accountPath in Directory.GetDirectories(AccDataPath))
                 {
                     string directoryName = Path.GetFileName(accountPath);
-                    string[] parts = directoryName.Split(AccountPathSeparator);
+                    string[] parts = directoryName.Split(new[] { AccountPathSeparator }, StringSplitOptions.None);
                     if (parts.Length == 0 || !int.TryParse(parts[0], out int userid))
                     {
                         continue;
@@ -355,9 +359,41 @@ namespace BoxMaker_Server
                     {
                         AccountPathByOpenId[parts[1]] = accountPath;
                     }
+
+                    CacheAccountFromFile(accountPath);
                 }
 
                 AccountPathCacheLoaded = true;
+            }
+        }
+
+        private static void CacheAccountFromFile(string accountPath)
+        {
+            try
+            {
+                string userInfoPath = UserInfoPath(accountPath);
+                if (!System.IO.File.Exists(userInfoPath))
+                {
+                    return;
+                }
+
+                smsg_login? account = JsonConvert.DeserializeObject<smsg_login>(System.IO.File.ReadAllText(userInfoPath));
+                if (account == null)
+                {
+                    return;
+                }
+
+                AccountPathByUserId[account.userid] = accountPath;
+                AccountByUserId[account.userid] = account;
+                if (!string.IsNullOrWhiteSpace(account.openid))
+                {
+                    AccountPathByOpenId[account.openid] = accountPath;
+                    AccountByOpenId[account.openid] = account;
+                }
+            }
+            catch
+            {
+                // Ignore malformed account files while keeping any path data recovered from the directory name.
             }
         }
 
