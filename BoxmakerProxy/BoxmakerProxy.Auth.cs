@@ -91,7 +91,7 @@ namespace BoxMaker_Server
 
                     smsg_login loginRet = new smsg_login();
 
-                    if (AccountManager.TryGetAccount(loginData.openid, out loginRet))
+                    if (AccountManager.IsAccountOpenIdTaken(loginData.openid))
                     {
                         return net_http.ret_msg(null, -11);
                     }
@@ -102,6 +102,10 @@ namespace BoxMaker_Server
                     }
 
                     loginRet = AccountManager.RegisterAccount(loginData.common.userid, loginData);
+                    if (loginRet == null)
+                    {
+                        return net_http.ret_msg(null, -11);
+                    }
 
                     loginRet.sig = $"{Guid.NewGuid().ToString().Replace("-", "")}";
                     if (KeepAliveDict.ContainsKey(loginRet.userid))

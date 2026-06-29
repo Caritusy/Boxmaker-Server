@@ -13,9 +13,9 @@ namespace BoxMaker_Server
     {
         private static readonly object AccountCacheLock = new object();
         private static readonly Dictionary<int, string> AccountPathByUserId = new Dictionary<int, string>();
-        private static readonly Dictionary<string, string> AccountPathByOpenId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, string> AccountPathByOpenId = new Dictionary<string, string>(StringComparer.Ordinal);
         private static readonly Dictionary<int, smsg_login> AccountByUserId = new Dictionary<int, smsg_login>();
-        private static readonly Dictionary<string, smsg_login> AccountByOpenId = new Dictionary<string, smsg_login>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, smsg_login> AccountByOpenId = new Dictionary<string, smsg_login>(StringComparer.Ordinal);
         private static bool AccountPathCacheLoaded;
 
         public static bool TryGetUserPath(int uid, out string path)
@@ -42,7 +42,12 @@ namespace BoxMaker_Server
                 return false;
             }
 
-            string lookupName = userName.Trim();
+            if (!TryNormalizeOpenId(userName, out string lookupName))
+            {
+                path = "";
+                return false;
+            }
+
             EnsureAccountPathCache();
             lock (AccountCacheLock)
             {
@@ -97,10 +102,15 @@ namespace BoxMaker_Server
                 return false;
             }
 
-            openid = openid.Trim();
+            if (!TryNormalizeOpenId(openid, out string normalizedOpenId))
+            {
+                loginData = null!;
+                return false;
+            }
+
             lock (AccountCacheLock)
             {
-                if (AccountByOpenId.TryGetValue(openid, out smsg_login? cachedAccount) && cachedAccount != null)
+                if (AccountByOpenId.TryGetValue(normalizedOpenId, out smsg_login? cachedAccount) && cachedAccount != null)
                 {
                     loginData = cachedAccount;
                     return true;
@@ -124,6 +134,20 @@ namespace BoxMaker_Server
             CacheAccount(loginData, p);
             return true;
 
+        }
+
+        public static bool IsAccountOpenIdTaken(string openid)
+        {
+            if (!TryNormalizeOpenId(openid, out string normalizedOpenId))
+            {
+                return false;
+            }
+
+            EnsureAccountPathCache();
+            lock (AccountCacheLock)
+            {
+                return AccountPathByOpenId.ContainsKey(normalizedOpenId);
+            }
         }
 
         public static bool TrySaveAccount(string openid, smsg_login loginData)
@@ -261,6 +285,10 @@ namespace BoxMaker_Server
             {
                 return null!;
             }
+            if (IsAccountOpenIdTaken(regData.openid))
+            {
+                return null!;
+            }
 
             string newDire = AccountDirectoryPath(userid, regData.openid);
             if (!Directory.Exists(newDire))
@@ -357,7 +385,7 @@ namespace BoxMaker_Server
                     AccountPathByUserId[userid] = accountPath;
                     if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
                     {
-                        AccountPathByOpenId[parts[1]] = accountPath;
+                        CacheAccountPathByOpenId(parts[1], accountPath);
                     }
 
                     CacheAccountFromFile(accountPath);
@@ -387,8 +415,7 @@ namespace BoxMaker_Server
                 AccountByUserId[account.userid] = account;
                 if (!string.IsNullOrWhiteSpace(account.openid))
                 {
-                    AccountPathByOpenId[account.openid] = accountPath;
-                    AccountByOpenId[account.openid] = account;
+                    CacheAccountOpenId(account.openid, accountPath, account);
                 }
             }
             catch
@@ -409,8 +436,7 @@ namespace BoxMaker_Server
                 AccountPathByUserId[account.userid] = accountPath;
                 if (!string.IsNullOrWhiteSpace(account.openid))
                 {
-                    AccountPathByOpenId[account.openid] = accountPath;
-                    AccountByOpenId[account.openid] = account;
+                    CacheAccountOpenId(account.openid, accountPath, account);
                 }
 
                 AccountByUserId[account.userid] = account;
@@ -434,6 +460,39 @@ namespace BoxMaker_Server
                     AccountByOpenId.Remove(openid);
                 }
             }
+        }
+
+        private static bool TryNormalizeOpenId(string openid, out string normalizedOpenId)
+        {
+            normalizedOpenId = "";
+            if (string.IsNullOrWhiteSpace(openid))
+            {
+                return false;
+            }
+
+            normalizedOpenId = openid.Trim().ToLowerInvariant();
+            return normalizedOpenId.Length > 0;
+        }
+
+        private static void CacheAccountPathByOpenId(string openid, string accountPath)
+        {
+            if (!TryNormalizeOpenId(openid, out string normalizedOpenId))
+            {
+                return;
+            }
+
+            AccountPathByOpenId[normalizedOpenId] = accountPath;
+        }
+
+        private static void CacheAccountOpenId(string openid, string accountPath, smsg_login account)
+        {
+            if (!TryNormalizeOpenId(openid, out string normalizedOpenId))
+            {
+                return;
+            }
+
+            AccountPathByOpenId[normalizedOpenId] = accountPath;
+            AccountByOpenId[normalizedOpenId] = account;
         }
 
         private static void QueueSaveAccount(string accountPath, smsg_login account)
